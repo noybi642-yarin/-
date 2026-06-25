@@ -14,6 +14,7 @@ const state = {
   currentUser: localStorage.getItem("km:currentUser") || "",
   savingNow: false,
   loading: true,
+  editMode: false,
 };
 
 const statusLabels = {
@@ -29,23 +30,16 @@ const educationStages = [
   ["high", "תיכון"],
 ];
 
-const navItems = [
-  ["dashboard", "Dashboard", "⌂"],
-  ["overview", "Overview", "◎"],
-  ["authorities", "רשויות", "▦"],
-  ["centers", "מרכזים", "▥"],
-  ["contacts", "אנשי קשר", "☎"],
-  ["tasks", "משימות", "☑"],
-  ["risks", "סיכונים", "⚠"],
-  ["opportunities", "הזדמנויות", "◈"],
-  ["workplans", "תוכניות עבודה", "▤"],
-  ["calendar", "לוח שנה שנתי", "◷"],
-  ["documents", "מסמכים", "▣"],
-  ["knowledge", "Knowledge Base", "▧"],
-  ["lessons", "Lessons Learned", "✦"],
-  ["activity", "Activity Log", "◔"],
-  ["insights", "תובנות ניהוליות", "◆"],
+const navGroups = [
+  { title: "סקירה", items: [["dashboard", "Dashboard", "⌂"], ["overview", "Overview", "◎"]] },
+  { title: "רשויות ואנשים", items: [["authorities", "רשויות", "▦"], ["centers", "מרכזים", "▥"], ["contacts", "אנשי קשר", "☎"]] },
+  { title: "תפעול", items: [["tasks", "משימות", "☑"], ["risks", "סיכונים", "⚠"], ["opportunities", "הזדמנויות", "◈"]] },
+  { title: "תכנון", items: [["workplans", "תוכניות עבודה", "▤"], ["calendar", "לוח שנה שנתי", "◷"]] },
+  { title: "ידע ומסמכים", items: [["documents", "מסמכים", "▣"], ["knowledge", "Knowledge Base", "▧"], ["lessons", "Lessons Learned", "✦"]] },
+  { title: "ניהול", items: [["activity", "Activity Log", "◔"], ["insights", "תובנות ניהוליות", "◆"]] },
 ];
+
+const navItems = navGroups.flatMap(g => g.items);
 
 const tabs = [
   ["snapshot", "תמונת מצב"],
@@ -65,8 +59,8 @@ function el(tag, attrs = {}, children = []) {
   Object.entries(attrs).forEach(([key, value]) => {
     if (key === "class") node.className = value;
     else if (key === "html") node.innerHTML = value;
-    else if (key.startsWith("on")) node.addEventListener(key.slice(2).toLowerCase(), value);
-    else node.setAttribute(key, value);
+    else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2).toLowerCase(), value);
+    else if (value !== null && value !== undefined) node.setAttribute(key, value);
   });
   children.forEach(child => node.append(child instanceof Node ? child : document.createTextNode(child)));
   return node;
@@ -109,6 +103,34 @@ function authorities() {
   return state.authorities && state.authorities.length ? state.authorities : KM_DATA.authorities;
 }
 
+function toggleEditMode() {
+  state.editMode = !state.editMode;
+  mount();
+}
+
+function progressInfo() {
+  const isPlaceholder = val => !val || /^\[הזן/.test(val.trim());
+  let filled = 0;
+  let total = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    if (
+      key.startsWith("block:") ||
+      key.startsWith("notes:") ||
+      key.startsWith("org:") ||
+      key.startsWith("timeline:") ||
+      key.startsWith("authority:")
+    ) {
+      total++;
+      if (!isPlaceholder(localStorage.getItem(key))) filled++;
+    }
+  }
+  const estimatedTotal = Math.max(total, 40);
+  const pct = Math.min(100, Math.round((filled / estimatedTotal) * 100));
+  return { filled, total: estimatedTotal, pct };
+}
+
 function renderInitWarning() {
   const warning = localStorage.getItem("km:initWarning");
   if (!warning) return;
@@ -142,13 +164,25 @@ function renderSidebar() {
       el("p", {}, ["חינוך לפסגות"])
     ])
   ]));
-  const group = el("div", { class: "nav-group" }, [el("div", { class: "nav-title" }, ["ניווט"])]);
-  navItems.forEach(([id, label, icon]) => {
-    group.append(el("button", {
-      class: `nav-item ${state.route === id ? "active" : ""}`,
-      onclick: () => { state.route = id; mount(); }
-    }, [el("span", { class: "nav-icon" }, [icon]), label]));
+
+  side.append(el("div", { class: "edit-mode-toggle" }, [
+    el("button", {
+      class: `edit-toggle-btn ${state.editMode ? "edit-mode-on" : "edit-mode-off"}`,
+      onclick: toggleEditMode
+    }, [state.editMode ? "✏ מצב עריכה פעיל" : "👁 מצב צפייה"])
+  ]));
+
+  navGroups.forEach(group => {
+    const groupEl = el("div", { class: "nav-group" }, [el("div", { class: "nav-title" }, [group.title])]);
+    group.items.forEach(([id, label, icon]) => {
+      groupEl.append(el("button", {
+        class: `nav-item ${state.route === id ? "active" : ""}`,
+        onclick: () => { state.route = id; mount(); }
+      }, [el("span", { class: "nav-icon" }, [icon]), label]));
+    });
+    side.append(groupEl);
   });
+
   const authNav = el("div", { class: "nav-group" }, [el("div", { class: "nav-title" }, ["רשויות"])]);
   authorities().forEach(item => {
     authNav.append(el("button", {
@@ -156,8 +190,42 @@ function renderSidebar() {
       onclick: () => { state.route = "authority"; state.authorityId = item.id; state.tab = "snapshot"; mount(); }
     }, [el("span", { class: "nav-icon" }, ["●"]), item.name]));
   });
-  side.append(group, authNav);
+  side.append(authNav);
+
+  side.append(el("div", { class: "nav-group handover-section" }, [
+    el("div", { class: "nav-title" }, ["חתימת מסירה"]),
+    renderHandoverSignature()
+  ]));
+
   return side;
+}
+
+function renderHandoverSignature() {
+  const from = localStorage.getItem("km:handoverFrom") || "";
+  const to   = localStorage.getItem("km:handoverTo")   || "";
+  const date = localStorage.getItem("km:handoverDate") || "";
+
+  if (!state.editMode) {
+    return el("div", { class: "handover-info" }, [
+      el("p", {}, [`ממסר: ${from || "—"}`]),
+      el("p", {}, [`מקבל/ת: ${to || "—"}`]),
+      el("p", {}, [`תאריך: ${date || "—"}`]),
+    ]);
+  }
+  return el("div", { class: "handover-form" }, [
+    el("input", {
+      class: "handover-input", placeholder: "שמך (ממסר/ת)",
+      value: from, oninput: e => localStorage.setItem("km:handoverFrom", e.target.value)
+    }),
+    el("input", {
+      class: "handover-input", placeholder: "שם המחליף/ה",
+      value: to, oninput: e => localStorage.setItem("km:handoverTo", e.target.value)
+    }),
+    el("input", {
+      class: "handover-input", type: "date",
+      value: date, oninput: e => localStorage.setItem("km:handoverDate", e.target.value)
+    }),
+  ]);
 }
 
 function renderMain() {
@@ -190,11 +258,20 @@ function renderTopbar() {
   const title = state.route === "authority"
     ? authorities().find(a => a.id === state.authorityId).name
     : KM_DATA.meta.title;
+  const progress = progressInfo();
   return el("div", { class: "topbar" }, [
     el("div", {}, [
       el("p", { class: "page-kicker" }, ["Executive Knowledge System"]),
       el("h1", { class: "page-title" }, [title]),
-      el("p", { class: "page-subtitle" }, [KM_DATA.meta.subtitle])
+      el("p", { class: "page-subtitle" }, [KM_DATA.meta.subtitle]),
+      el("div", { class: "progress-wrap" }, [
+        el("div", { class: "progress-track" }, [
+          el("div", { class: "progress-fill", style: `width:${progress.pct}%` })
+        ]),
+        el("span", { class: "progress-label" }, [
+          `${progress.pct}% הושלם — ${progress.filled} מתוך ${progress.total} סעיפים מולאו`
+        ])
+      ])
     ]),
     el("div", { class: "topbar-actions" }, [
       renderSaveControls(),
@@ -208,26 +285,45 @@ function renderTopbar() {
 }
 
 function renderSaveControls() {
-  return el("div", { class: "save-controls" }, [
-    el("input", {
-      class: "user-input",
-      placeholder: "מי מעדכן/ת?",
-      value: state.currentUser,
-      oninput: event => setCurrentUser(event.target.value)
-    }),
-    el("button", { class: "btn primary save-btn", onclick: saveCurrentPage }, ["שמור"]),
-    el("button", { class: "btn", onclick: exportPdf }, ["Export PDF"]),
-    el("button", { class: "btn", onclick: exportBackup }, ["גיבוי JSON"]),
-    el("button", { class: "btn", onclick: () => document.getElementById("backupImport").click() }, ["ייבוא גיבוי"]),
-    el("input", { id: "backupImport", class: "visually-hidden", type: "file", accept: "application/json", onchange: importBackup }),
+  const controls = [
+    el("button", {
+      class: `btn ${state.editMode ? "primary" : "btn-outline"} edit-toggle-topbar`,
+      onclick: toggleEditMode
+    }, [state.editMode ? "✏ עריכה פעילה" : "👁 צפייה בלבד"]),
+  ];
+
+  if (state.editMode) {
+    controls.push(
+      el("input", {
+        class: "user-input",
+        placeholder: "מי מעדכן/ת?",
+        value: state.currentUser,
+        oninput: event => setCurrentUser(event.target.value)
+      }),
+      el("button", { class: "btn primary save-btn", onclick: saveCurrentPage }, ["שמור"]),
+      el("button", { class: "btn", onclick: exportPdf }, ["Export PDF"]),
+      el("button", { class: "btn", onclick: exportBackup }, ["גיבוי JSON"]),
+      el("button", { class: "btn", onclick: () => document.getElementById("backupImport").click() }, ["ייבוא גיבוי"]),
+      el("input", { id: "backupImport", class: "visually-hidden", type: "file", accept: "application/json", onchange: importBackup }),
+    );
+  }
+
+  controls.push(
     el("span", { class: `db-status ${KM_DB.isConfigured() ? "online" : "local"}` }, [
       KM_DB.isConfigured() ? "Supabase מחובר" : "מצב מקומי"
-    ]),
-    el("span", { class: "autosave-status", id: "autosaveStatus" }, ["Auto Save פעיל"]),
-    el("span", { class: `save-status ${state.dirty ? "dirty" : "saved"}`, id: "saveStatus" }, [
-      state.dirty ? "יש שינויים שלא נשמרו" : savedLabel()
     ])
-  ]);
+  );
+
+  if (state.editMode) {
+    controls.push(
+      el("span", { class: "autosave-status", id: "autosaveStatus" }, ["Auto Save פעיל"]),
+      el("span", { class: `save-status ${state.dirty ? "dirty" : "saved"}`, id: "saveStatus" }, [
+        state.dirty ? "יש שינויים שלא נשמרו" : savedLabel()
+      ])
+    );
+  }
+
+  return el("div", { class: "save-controls" }, controls);
 }
 
 function renderDashboard() {
@@ -278,7 +374,11 @@ function renderHeatMap() {
   return el("section", { class: "panel" }, [
     el("h2", {}, ["Heat Map"]),
     el("div", { class: "heat-map" }, authorities().map(item =>
-      el("div", { class: `heat-cell ${item.status}` }, [
+      el("div", {
+        class: `heat-cell ${item.status}`,
+        style: "cursor:pointer",
+        onclick: () => { state.route = "authority"; state.authorityId = item.id; state.tab = "snapshot"; mount(); }
+      }, [
         el("strong", {}, [item.name]),
         el("span", {}, [statusLabels[item.status]])
       ])
@@ -287,13 +387,46 @@ function renderHeatMap() {
 }
 
 function renderCriticalWidgets() {
+  const allTasks = Object.entries(state.tableCache)
+    .filter(([k]) => k.includes(":tasks"))
+    .flatMap(([, rows]) => Array.isArray(rows) ? rows : []);
+  const allRisks = Object.entries(state.tableCache)
+    .filter(([k]) => k.includes(":risks"))
+    .flatMap(([, rows]) => Array.isArray(rows) ? rows : []);
+
+  const openTasks = allTasks.filter(r => {
+    const status = (r.cells && r.cells[4]) || "";
+    return !["סגור", "closed", "done", "הושלם"].some(s => status.toLowerCase().includes(s));
+  });
+
+  const today = new Date();
+  const soonTasks = allTasks.filter(r => {
+    const deadline = r.cells && r.cells[2];
+    if (!deadline || deadline.startsWith("[")) return false;
+    const d = new Date(deadline);
+    const diff = (d - today) / (1000 * 60 * 60 * 24);
+    return diff >= 0 && diff <= 14;
+  });
+
+  const openRisks = allRisks.filter(r => {
+    const status = (r.cells && r.cells[5]) || "";
+    return !["סגור", "closed", "resolved"].some(s => status.toLowerCase().includes(s));
+  });
+
+  const redCount    = authorities().filter(a => a.status === "red").length;
+  const yellowCount = authorities().filter(a => a.status === "yellow").length;
+
   return el("section", { class: "panel" }, [
     el("h2", {}, ["משימות וסיכונים קריטיים"]),
     el("div", { class: "grid cols-2" }, [
-      compactWidget("משימות פתוחות", "[הזן כאן משימות פתוחות]"),
-      compactWidget("משימות באיחור", "[הזן כאן משימות באיחור]"),
-      compactWidget("קרובות לדדליין", "[הזן כאן משימות קרובות לדדליין]"),
-      compactWidget("סיכונים פתוחים", "[הזן כאן סיכונים פתוחים]")
+      compactWidget("משימות פתוחות",
+        openTasks.length ? `${openTasks.length} משימות` : "אין משימות פתוחות", "tasks"),
+      compactWidget("קרובות לדדליין",
+        soonTasks.length ? `${soonTasks.length} ב-14 הימים הקרובים` : "אין משימות דחופות", "tasks"),
+      compactWidget("סיכונים פתוחים",
+        openRisks.length ? `${openRisks.length} סיכונים` : "אין סיכונים פתוחים", "risks"),
+      compactWidget("רשויות בסיכון",
+        `${redCount} אדום · ${yellowCount} צהוב`, "authorities"),
     ])
   ]);
 }
@@ -405,7 +538,7 @@ function renderTablePage(title, subtitle, key) {
 }
 
 function renderTableToolbar(key) {
-  return el("div", { class: "toolbar" }, [
+  const items = [
     el("input", { class: "filter-input", placeholder: "חיפוש בטבלה", oninput: event => filterTable(key, event.target.value) }),
     el("select", { class: "select" }, [
       el("option", {}, ["כל הסטטוסים"]),
@@ -413,9 +546,12 @@ function renderTableToolbar(key) {
       el("option", {}, ["בטיפול"]),
       el("option", {}, ["סגור"])
     ]),
-    el("button", { class: "btn primary", onclick: () => addTableRow(key) }, ["+ הוספת שורה"]),
-    el("button", { class: "btn", onclick: exportCsv }, ["ייצוא CSV"])
-  ]);
+  ];
+  if (state.editMode) {
+    items.push(el("button", { class: "btn primary", onclick: () => addTableRow(key) }, ["+ הוספת שורה"]));
+  }
+  items.push(el("button", { class: "btn", onclick: exportCsv }, ["ייצוא CSV"]));
+  return el("div", { class: "toolbar" }, items);
 }
 
 function renderEditableTable(key) {
@@ -424,23 +560,30 @@ function renderEditableTable(key) {
   const storageKey = `table:${contextKey}:${key}`;
   ensureRowsLoaded(key, headers, contextKey);
   const rows = state.tableCache[storageKey] || loadJson(storageKey) || defaultRows(headers);
+  const allHeaders = state.editMode ? [...headers, "פעולות"] : headers;
   return el("div", { class: "table-wrap" }, [
     el("table", { "data-table": key }, [
-      el("thead", {}, [el("tr", {}, [...headers.map(h => el("th", {}, [h])), el("th", {}, ["פעולות"])])]),
-      el("tbody", { oninput: () => saveTable(key) }, rows.map(row => tableRow(key, row)))
+      el("thead", {}, [el("tr", {}, allHeaders.map(h => el("th", {}, [h])))]),
+      el("tbody", state.editMode ? { oninput: () => saveTable(key) } : {}, rows.map(row => tableRow(key, row)))
     ])
   ]);
 }
 
 function tableRow(key, row) {
   const record = Array.isArray(row) ? { id: `local-${crypto.randomUUID()}`, cells: row } : row;
-  return el("tr", { "data-row-id": record.id }, [
-    ...record.cells.map(value => el("td", { contenteditable: "true" }, [value])),
-    el("td", {}, [el("button", { class: "btn danger", onclick: () => deleteTableRow(key, record.id) }, ["מחיקה"])])
-  ]);
+  const cells = record.cells.map(value =>
+    state.editMode
+      ? el("td", { contenteditable: "true" }, [value])
+      : el("td", {}, [value])
+  );
+  const actions = state.editMode
+    ? [el("td", {}, [el("button", { class: "btn danger", onclick: () => deleteTableRow(key, record.id) }, ["מחיקה"])])]
+    : [];
+  return el("tr", { "data-row-id": record.id }, [...cells, ...actions]);
 }
 
 function addTableRow(key) {
+  if (!state.editMode) return;
   const table = document.querySelector(`[data-table="${key}"] tbody`);
   if (!table) return;
   table.append(tableRow(key, { id: `local-${crypto.randomUUID()}`, cells: KM_DATA.tables[key].map(h => `[הזן כאן ${h}]`) }));
@@ -558,20 +701,23 @@ function timelineItem(title, text) {
 function renderNotes() {
   const key = `notes:${state.route}:${state.authorityId}:${state.tab}`;
   ensureNoteLoaded(key);
+  const noteContent = state.noteCache[key] || localStorage.getItem(key) || "";
   return el("section", { class: "notes-dock" }, [
     el("div", { class: "notes-head" }, [
       el("h3", {}, ["Notes"]),
       el("span", { class: "meta-line" }, [`Last Updated: ${savedLabel()} | Who: ${currentUserLabel()}`])
     ]),
-    el("textarea", {
-      placeholder: "[הוסף/י כאן הערות חופשיות לעמוד הנוכחי]",
-      "data-storage-key": key,
-      oninput: event => {
-        localStorage.setItem(key, event.target.value);
-        markDirty();
-      },
-    }, [state.noteCache[key] || localStorage.getItem(key) || ""]),
-    renderAttachments()
+    state.editMode
+      ? el("textarea", {
+          placeholder: "[הוסף/י כאן הערות חופשיות לעמוד הנוכחי]",
+          "data-storage-key": key,
+          oninput: event => {
+            localStorage.setItem(key, event.target.value);
+            markDirty();
+          },
+        }, [noteContent])
+      : el("div", { class: "notes-readonly" }, [noteContent || "אין הערות לעמוד זה."]),
+    state.editMode ? renderAttachments() : renderAttachmentsReadonly()
   ]);
 }
 
@@ -583,6 +729,20 @@ function renderAttachments() {
       el("button", { class: "btn", onclick: () => document.getElementById("fileAttachInput").click() }, ["צירוף קובץ"]),
       el("input", { id: "fileAttachInput", class: "visually-hidden", type: "file", multiple: "true", onchange: handleFileAttach })
     ]),
+    el("div", { class: "attachment-list" }, attachments.slice(0, 6).map(file =>
+      el("div", { class: "attachment-item" }, [
+        el("span", {}, [file.name]),
+        el("small", {}, [`${formatBytes(file.size)} | ${file.updated_by || currentUserLabel()}`])
+      ])
+    ))
+  ]);
+}
+
+function renderAttachmentsReadonly() {
+  const attachments = loadJson("km:attachments") || [];
+  if (!attachments.length) return el("div", {});
+  return el("div", { class: "attachments" }, [
+    el("strong", {}, ["קבצים מצורפים"]),
     el("div", { class: "attachment-list" }, attachments.slice(0, 6).map(file =>
       el("div", { class: "attachment-item" }, [
         el("span", {}, [file.name]),
@@ -617,18 +777,33 @@ function renderActivityItem(item) {
 
 function bindSearch() {
   const input = document.getElementById("globalSearch");
-  const box = document.getElementById("searchResults");
+  const box   = document.getElementById("searchResults");
   input.addEventListener("input", () => {
     const q = input.value.trim().toLowerCase();
     box.innerHTML = "";
     if (!q) { box.classList.remove("open"); return; }
-    searchIndex().filter(item => item.text.toLowerCase().includes(q)).slice(0, 16).forEach(item => {
-      box.append(el("div", { class: "search-result" }, [
+    const results = searchIndex().filter(item => item.text.toLowerCase().includes(q)).slice(0, 16);
+    results.forEach(item => {
+      const resultEl = el("div", { class: "search-result" }, [
         el("strong", {}, [item.title]),
         el("span", {}, [item.type]),
-      ]));
+      ]);
+      if (item.route) {
+        resultEl.style.cursor = "pointer";
+        resultEl.addEventListener("click", () => {
+          state.route = item.route;
+          if (item.authorityId) state.authorityId = item.authorityId;
+          if (item.tab) state.tab = item.tab;
+          box.classList.remove("open");
+          input.value = "";
+          mount();
+        });
+      }
+      box.append(resultEl);
     });
-    if (!box.children.length) box.append(el("div", { class: "search-result" }, [el("span", {}, ["לא נמצאו תוצאות."]) ]));
+    if (!box.children.length) {
+      box.append(el("div", { class: "search-result" }, [el("span", {}, ["לא נמצאו תוצאות."])]));
+    }
     box.classList.add("open");
   });
 }
@@ -637,11 +812,14 @@ function searchIndex() {
   const items = [];
   authorities().forEach(a => {
     const manager = getAuthorityValue(a.id, "manager", a.manager);
-    items.push({ title: a.name, type: "רשות", text: `${a.name} ${manager} ${statusLabels[a.status]}` });
-    tabs.forEach(([, label]) => items.push({ title: `${a.name} / ${label}`, type: "עמוד רשות", text: `${a.name} ${label}` }));
+    items.push({ title: a.name, type: "רשות", text: `${a.name} ${manager} ${statusLabels[a.status]}`, route: "authority", authorityId: a.id });
+    tabs.forEach(([tabId, label]) => items.push({
+      title: `${a.name} / ${label}`, type: "עמוד רשות", text: `${a.name} ${label}`,
+      route: "authority", authorityId: a.id, tab: tabId
+    }));
   });
-  navItems.forEach(([, label]) => items.push({ title: label, type: "ניווט", text: label }));
-  KM_DATA.knowledgeBase.forEach(([title, text]) => items.push({ title, type: "Knowledge Base", text: `${title} ${text}` }));
+  navItems.forEach(([id, label]) => items.push({ title: label, type: "ניווט", text: label, route: id }));
+  KM_DATA.knowledgeBase.forEach(([title, text]) => items.push({ title, type: "Knowledge Base", text: `${title} ${text}`, route: "knowledge" }));
   Object.entries(state.tableCache).forEach(([key, rows]) => {
     if (!Array.isArray(rows)) return;
     rows.forEach(row => items.push({ title: row.cells?.[0] || key, type: `טבלה: ${key}`, text: `${key} ${(row.cells || []).join(" ")}` }));
@@ -665,8 +843,12 @@ function searchIndex() {
 
 function editableBlock(key, fallback, className = "editable-block") {
   ensureNoteLoaded(key);
+  const content = state.noteCache[key] || localStorage.getItem(key) || fallback;
+  if (!state.editMode) {
+    return el("div", { class: className }, [content]);
+  }
   return el("div", {
-    class: className,
+    class: `${className} editing`,
     contenteditable: "true",
     "data-storage-key": key,
     "data-note-title": key,
@@ -674,7 +856,7 @@ function editableBlock(key, fallback, className = "editable-block") {
       localStorage.setItem(key, event.currentTarget.textContent);
       markDirty();
     }
-  }, [state.noteCache[key] || localStorage.getItem(key) || fallback]);
+  }, [content]);
 }
 
 function loadJson(key) {
@@ -686,6 +868,7 @@ function loadJson(key) {
 }
 
 function saveCurrentPage() {
+  if (!state.editMode) return;
   clearTimeout(state.autosaveTimer);
   state.savingNow = true;
   document.querySelectorAll("[contenteditable='true'][data-storage-key]").forEach(node => {
@@ -726,6 +909,7 @@ function saveCurrentPage() {
 }
 
 function markDirty() {
+  if (!state.editMode) return;
   state.dirty = true;
   updateSaveStatus("יש שינויים שלא נשמרו", true);
   if (state.savingNow) return;
@@ -880,45 +1064,59 @@ function ensureNoteLoaded(key) {
   });
 }
 
-function compactWidget(title, text) {
-  return el("div", { class: "empty-line" }, [el("strong", {}, [title]), el("div", {}, [text])]);
-}
-
-function metric(label, value) {
-  return el("div", { class: "metric" }, [el("span", {}, [label]), el("strong", {}, [value])]);
+function compactWidget(title, text, route) {
+  return el("div", {
+    class: "empty-line",
+    style: route ? "cursor:pointer" : "",
+    onclick: route ? () => { state.route = route; mount(); } : null
+  }, [el("strong", {}, [title]), el("div", {}, [text])]);
 }
 
 function editableMetric(authorityId, field, label, fallback) {
-  const key = `authority:${authorityId}:${field}`;
+  const key   = `authority:${authorityId}:${field}`;
+  const value = localStorage.getItem(key) || fallback;
+  if (!state.editMode) {
+    return el("div", { class: "metric" }, [
+      el("span", {}, [label]),
+      el("strong", {}, [value])
+    ]);
+  }
   return el("div", { class: "metric editable-metric" }, [
     el("span", {}, [label]),
     el("strong", {
       contenteditable: "true",
       "data-storage-key": key,
       oninput: event => {
-        const value = event.currentTarget.textContent;
-        localStorage.setItem(key, value);
-        KM_DB.saveAuthorityField(authorityId, field, value).then(result => {
+        const val = event.currentTarget.textContent;
+        localStorage.setItem(key, val);
+        KM_DB.saveAuthorityField(authorityId, field, val).then(result => {
           if (result && result.ok) updateSaveStatus(KM_DB.isConfigured() ? "נשמר ב-Supabase" : "נשמר מקומית");
         });
         KM_DB.logActivity("update", "authority", authorityId, `עודכן שדה רשות: ${label}`);
         markDirty();
       }
-    }, [localStorage.getItem(key) || fallback])
+    }, [value])
   ]);
 }
 
 function editableStageMetric(authorityId, stageId, field, label) {
-  const key = `authority:${authorityId}:stage:${stageId}:${field}`;
+  const key   = `authority:${authorityId}:stage:${stageId}:${field}`;
+  const value = localStorage.getItem(key) || "[הזן]";
+  if (!state.editMode) {
+    return el("label", { class: "stage-field" }, [
+      el("span", {}, [label]),
+      el("b", {}, [value])
+    ]);
+  }
   return el("label", { class: "stage-field" }, [
     el("span", {}, [label]),
     el("b", {
       contenteditable: "true",
       "data-storage-key": key,
       oninput: event => {
-        const value = event.currentTarget.textContent;
-        localStorage.setItem(key, value);
-        KM_DB.saveNote(key, value, {
+        const val = event.currentTarget.textContent;
+        localStorage.setItem(key, val);
+        KM_DB.saveNote(key, val, {
           authorityId,
           noteType: "education_stage",
           title: `${authorityId}/${stageId}/${field}`,
@@ -926,7 +1124,7 @@ function editableStageMetric(authorityId, stageId, field, label) {
         KM_DB.logActivity("update", "education_stage", authorityId, `עודכנה חלוקה לפי שכבה: ${label}`);
         markDirty();
       }
-    }, [localStorage.getItem(key) || "[הזן]"])
+    }, [value])
   ]);
 }
 
