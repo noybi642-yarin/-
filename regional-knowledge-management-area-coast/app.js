@@ -149,14 +149,14 @@ function renderSidebar() {
       onclick: () => { state.route = id; mount(); }
     }, [el("span", { class: "nav-icon" }, [icon]), label]));
   });
-  const authorities = el("div", { class: "nav-group" }, [el("div", { class: "nav-title" }, ["רשויות"])]);
+  const authNav = el("div", { class: "nav-group" }, [el("div", { class: "nav-title" }, ["רשויות"])]);
   authorities().forEach(item => {
-    authorities.append(el("button", {
+    authNav.append(el("button", {
       class: `nav-item ${state.route === "authority" && state.authorityId === item.id ? "active" : ""}`,
       onclick: () => { state.route = "authority"; state.authorityId = item.id; state.tab = "snapshot"; mount(); }
     }, [el("span", { class: "nav-icon" }, ["●"]), item.name]));
   });
-  side.append(group, authorities);
+  side.append(group, authNav);
   return side;
 }
 
