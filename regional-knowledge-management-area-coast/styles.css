@@ -768,3 +768,144 @@ td[contenteditable="true"] {
     break-inside: avoid;
   }
 }
+
+/* ── Edit / View mode toggle ── */
+.edit-mode-toggle {
+  margin: 14px 0 6px;
+  padding: 0 6px;
+}
+
+.edit-toggle-btn {
+  width: 100%;
+  border: none;
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  transition: background .15s, color .15s;
+}
+
+.edit-mode-on {
+  background: #f59e0b;
+  color: #1c1917;
+}
+
+.edit-mode-on:hover { background: #d97706; }
+
+.edit-mode-off {
+  background: rgba(255,255,255,.1);
+  color: #dbe4ee;
+}
+
+.edit-mode-off:hover { background: rgba(255,255,255,.18); }
+
+.edit-toggle-topbar {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Visual indicator on editable elements */
+.editing {
+  border: 1.5px dashed #14b8a6 !important;
+  border-radius: 6px;
+  background: #f0fdf9 !important;
+  cursor: text;
+}
+
+.editing:focus {
+  outline: none;
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 3px rgba(20,184,166,.15);
+}
+
+/* ── Progress bar ── */
+.progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.progress-track {
+  flex: 1;
+  height: 7px;
+  background: var(--line);
+  border-radius: 99px;
+  overflow: hidden;
+  max-width: 320px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #14b8a6, #0f766e);
+  border-radius: 99px;
+  transition: width .4s ease;
+}
+
+.progress-label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── Notes readonly ── */
+.notes-readonly {
+  min-height: 80px;
+  padding: 12px 14px;
+  background: var(--panel-soft);
+  border-radius: var(--radius);
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  border: 1px solid var(--line);
+}
+
+/* ── Handover signature ── */
+.handover-section {
+  border-top: 1px solid rgba(255,255,255,.1);
+  margin-top: 18px;
+  padding-top: 4px;
+}
+
+.handover-info p {
+  margin: 4px 8px;
+  font-size: 12px;
+  color: #aab4c1;
+}
+
+.handover-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+.handover-input {
+  width: 100%;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 6px;
+  color: #eef2f7;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.handover-input::placeholder { color: #6b7280; }
+.handover-input:focus {
+  outline: none;
+  border-color: #14b8a6;
+  background: rgba(255,255,255,.12);
+}
+
+/* ── Clickable dashboard widgets ── */
+.empty-line[style*="cursor:pointer"]:hover {
+  background: var(--panel-soft);
+  border-radius: var(--radius);
+}
+
+/* ── Clickable search results ── */
+.search-result[style*="cursor:pointer"]:hover {
+  background: #f0fdf9;
+}
